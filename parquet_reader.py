@@ -71,12 +71,13 @@ def process_file_to_memmap(file, identifier_df, memmap_path, memmap_shape):
     content_hashes = np.array(content_hashes, dtype=np.uint64)
     df['content_hash'] = content_hashes
 
+    df = df.drop_duplicates(subset=['content_hash'])  # Remove duplicates, if any
+
     df['content'] = df['title_en'] + '\n' + df['full_content_en']
     df = df.drop(columns=['title_en', 'full_content_en'])
 
     df = pd.merge(df, identifier_df, how='inner', left_on='content_hash', right_index=True)
 
-    df = df.drop_duplicates(subset=['row_number'])  # Remove duplicates, if any
     gc.collect()
     word_indices = np.memmap(memmap_path, dtype=np.uint16, mode='r+',
                              shape=memmap_shape)

@@ -82,6 +82,7 @@ def main():
             model.eval()
             with torch.no_grad():
                 for i, batch in enumerate(test_loader):
+                    batch = batch.cuda()
                     batch = torch.reshape(batch, (-1, batch.shape[-1]))
                     outputs = model(batch)
                     outputs = torch.reshape(outputs, [-1, 3, outputs.shape[-1]])
@@ -100,7 +101,6 @@ def main():
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict()
         }, str(save_path))
-        breakpoint()
 
 
 if __name__ == '__main__':

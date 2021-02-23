@@ -34,12 +34,17 @@ def training_generator(memmap_directory, apikey_weighted_df):
     skip_count = 0
     total_count = 0
 
+    apikey_list = list(set(data['apikey']))  # Uniquify
+    # Precompute per-apikey dataframes to speed things up later
+    per_apikey_dfs = {apikey: data[data['apikey'] == apikey].copy(deep=True)
+                      for apikey in apikey_list}
+
     while True:
         # sample from weighted apikey
         # We could also pregenerate the per-apikey dataframes to save time
         apikey = random.choices(apikey_weighted_df['apikey'].tolist(), k=1,
                                 weights=apikey_weighted_df['weights'].tolist())[0]
-        apikey_subset = data[data['apikey'] == apikey]
+        apikey_subset = per_apikey_dfs[apikey]
         # compare_subset = d[compare['apikey'] == apikey]
 
         # if len(compare_subset) < 2:

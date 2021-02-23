@@ -3,7 +3,6 @@ from triplet_training_generator import get_train_test_apikeys, training_generato
 from pathlib import Path
 from transformers import AutoModel
 import torch
-from torch.cuda.amp import autocast
 from tqdm import tqdm
 
 MEMMAP_DIRECTORY = Path("/media/data/tokenized_crawl")
@@ -36,12 +35,13 @@ def main():
     batches_per_epoch = 8192
     eval_batches_per_epoch = 1024
     save_path = Path('model.save')
-    # TODO Also try with a linear layer at the end that maps it to a smaller dimensionality
+
     train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(MEMMAP_DIRECTORY)
     train_dataset = DataGenerator(MEMMAP_DIRECTORY, train_weighted_apikeys)
     train_loader = DataLoader(train_dataset, batch_size=16, pin_memory=True, num_workers=8)
     test_dataset = DataGenerator(MEMMAP_DIRECTORY, test_weighted_apikeys)
     test_loader = DataLoader(test_dataset, batch_size=16, pin_memory=True, num_workers=12)
+
     model = SectionModel().cuda()
     # Diverges or just outputs the same vector for all samples at higher LRs
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-6)
@@ -101,6 +101,7 @@ def main():
             'optimizer_state_dict': optimizer.state_dict()
         }, str(save_path))
         breakpoint()
+
 
 if __name__ == '__main__':
     main()

@@ -23,34 +23,40 @@ class SectionModel(torch.nn.Module):
         super(SectionModel, self).__init__()
         # We need to make sure this matches the model we tokenized for!
         self.bert = AutoModel.from_pretrained('distilbert-base-cased')
-        self.linear = torch.nn.Linear(768, 256, bias=False)
+        self.out = torch.nn.Linear(768, 256, bias = False)
 
     def forward(self, tensor_in):
         out = self.bert(tensor_in)[0]
-        out = out[:, 0, :]  # CLS token
-        return self.linear(out)
+        # out = out[:, 0, :]  # CLS token
+        out = out.mean(dim=1, keepdims=False)  # Mean pooling
+        return self.out(out)
 
 
 def main():
-    batches_per_epoch = 8192
-    eval_batches_per_epoch = 1024
+    batch_size = 32
+    batches_per_epoch = (2 ** 19) // batch_size
+    eval_batches_per_epoch = (2 ** 18) // batch_size
     save_path = Path('model.save')
 
     train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(MEMMAP_DIRECTORY)
     train_dataset = DataGenerator(MEMMAP_DIRECTORY, train_weighted_apikeys)
-    train_loader = DataLoader(train_dataset, batch_size=16, pin_memory=True, num_workers=8)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, num_workers=8)
     test_dataset = DataGenerator(MEMMAP_DIRECTORY, test_weighted_apikeys)
-    test_loader = DataLoader(test_dataset, batch_size=16, pin_memory=True, num_workers=12)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=12)
 
     model = SectionModel().cuda()
     # Diverges or just outputs the same vector for all samples at higher LRs
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-6)
+    model_params = model.parameters()
+    optimizer = torch.optim.Adam(model_params, lr=1e-6)
     if save_path.is_file():
         print("Loading state...")
         checkpoint = torch.load(str(save_path))
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    for epoch in range(10):
+        start_epoch = checkpoint['epoch'] + 1
+    else:
+        start_epoch = 0
+    for epoch in range(start_epoch, 60):
         with tqdm(total=batches_per_epoch) as bar:
             bar.set_description(f"Epoch {epoch}")
             bar_loss = 0.
@@ -70,6 +76,7 @@ def main():
                 loss = torch.relu(loss)  # Clip to zero
                 loss = loss.mean()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model_params, max_norm=1.0)
                 optimizer.step()
                 bar.update(1)
                 bar_loss = ((bar_loss * i) + float(loss.detach())) / (i + 1)  # Rolling mean loss

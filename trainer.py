@@ -1,4 +1,6 @@
 from torch.utils.data import IterableDataset, DataLoader
+from torch import nn
+from torch.nn import functional as F
 from triplet_training_generator import get_train_test_apikeys, training_generator
 from pathlib import Path
 from transformers import AutoModel
@@ -57,7 +59,7 @@ def main():
     else:
         start_epoch = 0
     for epoch in range(start_epoch, 60):
-        with tqdm(total=batches_per_epoch) as bar:
+        with tqdm(total=batches_per_epoch, dynamic_ncols=True) as bar:
             bar.set_description(f"Epoch {epoch}")
             bar_loss = 0.
             model.train()
@@ -70,10 +72,15 @@ def main():
                 batch = torch.reshape(batch, (-1, batch.shape[-1]))
                 outputs = model(batch)
                 outputs = torch.reshape(outputs, [-1, 3, outputs.shape[-1]])
-                positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
-                negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
-                loss = positive_distances - negative_distances + 1  # 1 is the margin term
-                loss = torch.relu(loss)  # Clip to zero
+                # positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
+                # negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
+                # loss = positive_distances - negative_distances + 1  # 1 is the margin term
+                # loss = torch.relu(loss)  # Clip to zero
+                # loss = loss.mean()
+                positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
+                negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
+                loss = negative_similarities - positive_similarities + 1
+                loss = torch.relu(loss)
                 loss = loss.mean()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model_params, max_norm=1.0)
@@ -83,7 +90,7 @@ def main():
                 bar.set_postfix_str(f"Loss: {bar_loss:.3f}")
                 if i == batches_per_epoch - 1:
                     break
-        with tqdm(total=eval_batches_per_epoch) as bar:
+        with tqdm(total=eval_batches_per_epoch, dynamic_ncols=True) as bar:
             bar.set_description(f"Eval epoch {epoch}")
             bar_loss = 0.
             model.eval()
@@ -93,9 +100,12 @@ def main():
                     batch = torch.reshape(batch, (-1, batch.shape[-1]))
                     outputs = model(batch)
                     outputs = torch.reshape(outputs, [-1, 3, outputs.shape[-1]])
-                    positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
-                    negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
-                    loss = positive_distances - negative_distances + 1  # 1 is the margin term
+                    # positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
+                    # negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
+                    # loss = positive_distances - negative_distances + 1  # 1 is the margin term
+                    positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
+                    negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
+                    loss = negative_similarities - positive_similarities + 1
                     loss = torch.relu(loss)  # Clip to zero
                     loss = loss.mean()
                     bar.update(1)

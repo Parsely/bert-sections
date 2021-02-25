@@ -55,11 +55,15 @@ def training_generator(memmap_directory, apikey_weighted_df):
         anchor_row_number = anchor_row.row_number
         total_count += 1
         try:
-            positive_vector = word_indices[apikey_subset[(apikey_subset['section'] == anchor_section) & (
-                        apikey_subset['row_number'] != anchor_row_number)].sample(n=1).iloc[0].row_number]
-            negative = apikey_subset[(apikey_subset['section'] != anchor_section)].sample(n=1).iloc[0]
-            negative_vector = word_indices[negative.row_number]
-            # negative_section = negative.section
+            # positive_vector = word_indices[apikey_subset[(apikey_subset['section'] == anchor_section) & (
+            #             apikey_subset['row_number'] != anchor_row_number)].sample(n=1).iloc[0].row_number]
+            positive_rownum = apikey_subset.query(
+                'section == @anchor_section & row_number != @anchor_row_number').sample(1).iloc[0].row_number
+            positive_vector = word_indices[positive_rownum]
+            # negative = apikey_subset[(apikey_subset['section'] != anchor_section)].sample(n=1).iloc[0]
+            # negative_vector = word_indices[negative.row_number]
+            negative_rownum = apikey_subset.query('section != @anchor_section').sample(1).iloc[0].row_number
+            negative_vector = word_indices[negative_rownum]
             # We store the data as np.uint16 to save space, but we definitely want a more normal
             # data type before it goes to Pytorch
             yield np.stack([anchor_vector, positive_vector, negative_vector]).astype(np.int)

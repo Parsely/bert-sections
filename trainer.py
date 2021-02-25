@@ -42,9 +42,9 @@ def main():
 
     train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(MEMMAP_DIRECTORY)
     train_dataset = DataGenerator(MEMMAP_DIRECTORY, train_weighted_apikeys)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, num_workers=11)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, num_workers=8)
     test_dataset = DataGenerator(MEMMAP_DIRECTORY, test_weighted_apikeys)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=11)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=8)
 
     model = SectionModel().cuda()
     # Diverges or just outputs the same vector for all samples at higher LRs

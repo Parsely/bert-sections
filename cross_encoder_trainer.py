@@ -21,23 +21,37 @@ class DataGenerator(IterableDataset):
         return self.data_generator
 
 
-class SectionModel(torch.nn.Module):
+class CrossEncoderModel(torch.nn.Module):
     def __init__(self):
-        super(SectionModel, self).__init__()
+        super(CrossEncoderModel, self).__init__()
         # We need to make sure this matches the model we tokenized for!
         # self.bert = AutoModel.from_pretrained('distilbert-base-cased')
         self.bert = AutoModel.from_pretrained('distilbert-base-cased')
+        self.hidden = nn.Linear(768, 512)
+        self.out = nn.Linear(512, 1)
         # self.out = torch.nn.Linear(768, 768, bias=False)
 
-    def forward(self, tensor_in):
-        out = self.bert(tensor_in)[0]
+    def forward(self, tensor_in, sep_token_id=102):
+        positive_pairs = torch.cat([tensor_in[:, 0], tensor_in[:, 1]], dim=1)
+        positive_pairs[:, 256] = sep_token_id
+        negative_pairs = torch.cat([tensor_in[:, 0], tensor_in[:, 2]], dim=1)
+        negative_pairs[:, 256] = sep_token_id
+        positive_labels = torch.ones(len(positive_pairs), dtype=torch.float32, device=tensor_in.device)
+        negative_labels = torch.zeros_like(positive_labels)
+        labels = torch.cat([positive_labels, negative_labels])
+        inputs = torch.cat([positive_pairs, negative_pairs], dim=0)
+        assert len(labels) == inputs.shape[0]
+        out = self.bert(inputs)[0]
         # out = out[:, 0, :]  # CLS token
         out = out.mean(dim=1, keepdims=False)  # Mean pooling
-        return out
+        out = F.gelu(self.hidden(out))
+        out = torch.squeeze(self.out(out))
+        loss = F.binary_cross_entropy_with_logits(out, labels)
+        return loss
 
 
 def main():
-    batch_size = 32
+    batch_size = 16
     batches_per_epoch = (2 ** 19) // batch_size
     eval_batches_per_epoch = (2 ** 18) // batch_size
     save_path = Path('model.save')
@@ -49,10 +63,10 @@ def main():
     test_dataset = DataGenerator(MEMMAP_DIRECTORY, debug_weighted_apikeys)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=1)
 
-    model = SectionModel().cuda()
+    model = CrossEncoderModel().cuda()
     # Diverges or just outputs the same vector for all samples at higher LRs
     model_params = model.parameters()
-    optimizer = torch.optim.Adam(model_params, lr=1e-5)
+    optimizer = torch.optim.Adam(model_params, lr=1e-4)
     if save_path.is_file():
         print("Loading state...")
         checkpoint = torch.load(str(save_path))
@@ -69,22 +83,8 @@ def main():
             optimizer.zero_grad()
             for i, batch in enumerate(train_loader):
                 batch = batch.cuda()
-                # The model expects data to have the shape (batch_size, num_tokens)
-                # We reshape the data before it goes into the model to merge the batch dimension and the triplet dimension
-                # Then we reconstruct those as separate dimensions afterwards
-                batch = torch.reshape(batch, (-1, batch.shape[-1]))
-                outputs = model(batch)
-                outputs = torch.reshape(outputs, [-1, 3, outputs.shape[-1]])
-                positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
-                negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
-                loss = positive_distances - negative_distances + 1  # 1 is the margin term
-                # positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
-                # negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
-                # loss = negative_similarities - positive_similarities + 1
-                loss = torch.relu(loss)
-                loss = loss.mean()
+                loss = model(batch)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model_params, max_norm=1.0)
                 optimizer.step()
                 bar.update(1)
                 bar_loss = ((bar_loss * i) + float(loss.detach())) / (i + 1)  # Rolling mean loss
@@ -98,17 +98,7 @@ def main():
             with torch.no_grad():
                 for i, batch in enumerate(test_loader):
                     batch = batch.cuda()
-                    batch = torch.reshape(batch, (-1, batch.shape[-1]))
-                    outputs = model(batch)
-                    outputs = torch.reshape(outputs, [-1, 3, outputs.shape[-1]])
-                    positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
-                    negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
-                    loss = positive_distances - negative_distances + 1  # 1 is the margin term
-                    # positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
-                    # negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
-                    # loss = negative_similarities - positive_similarities + 1
-                    loss = torch.relu(loss)  # Clip to zero
-                    loss = loss.mean()
+                    loss = model(batch)
                     bar.update(1)
                     bar_loss = ((bar_loss * i) + float(loss.detach())) / (i + 1)  # Rolling mean loss
                     bar.set_postfix_str(f"Loss: {bar_loss:.3f}")

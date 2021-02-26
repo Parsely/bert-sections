@@ -25,13 +25,13 @@ class SectionModel(torch.nn.Module):
         super(SectionModel, self).__init__()
         # We need to make sure this matches the model we tokenized for!
         self.bert = AutoModel.from_pretrained('distilbert-base-cased')
-        self.out = torch.nn.Linear(768, 256, bias = False)
+        # self.out = torch.nn.Linear(768, 768, bias=False)
 
     def forward(self, tensor_in):
         out = self.bert(tensor_in)[0]
         # out = out[:, 0, :]  # CLS token
         out = out.mean(dim=1, keepdims=False)  # Mean pooling
-        return self.out(out)
+        return out
 
 
 def main():
@@ -42,9 +42,9 @@ def main():
 
     train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(MEMMAP_DIRECTORY)
     train_dataset = DataGenerator(MEMMAP_DIRECTORY, train_weighted_apikeys)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, num_workers=8)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, num_workers=1)
     test_dataset = DataGenerator(MEMMAP_DIRECTORY, test_weighted_apikeys)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=8)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=1)
 
     model = SectionModel().cuda()
     # Diverges or just outputs the same vector for all samples at higher LRs
@@ -72,14 +72,12 @@ def main():
                 batch = torch.reshape(batch, (-1, batch.shape[-1]))
                 outputs = model(batch)
                 outputs = torch.reshape(outputs, [-1, 3, outputs.shape[-1]])
-                # positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
-                # negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
-                # loss = positive_distances - negative_distances + 1  # 1 is the margin term
-                # loss = torch.relu(loss)  # Clip to zero
-                # loss = loss.mean()
-                positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
-                negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
-                loss = negative_similarities - positive_similarities + 1
+                positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
+                negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
+                loss = positive_distances - negative_distances + 1  # 1 is the margin term
+                # positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
+                # negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
+                # loss = negative_similarities - positive_similarities + 1
                 loss = torch.relu(loss)
                 loss = loss.mean()
                 loss.backward()
@@ -100,12 +98,12 @@ def main():
                     batch = torch.reshape(batch, (-1, batch.shape[-1]))
                     outputs = model(batch)
                     outputs = torch.reshape(outputs, [-1, 3, outputs.shape[-1]])
-                    # positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
-                    # negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
-                    # loss = positive_distances - negative_distances + 1  # 1 is the margin term
-                    positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
-                    negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
-                    loss = negative_similarities - positive_similarities + 1
+                    positive_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 1], dim=1)
+                    negative_distances = torch.linalg.norm(outputs[:, 0] - outputs[:, 2], dim=1)
+                    loss = positive_distances - negative_distances + 1  # 1 is the margin term
+                    # positive_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 1])
+                    # negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
+                    # loss = negative_similarities - positive_similarities + 1
                     loss = torch.relu(loss)  # Clip to zero
                     loss = loss.mean()
                     bar.update(1)

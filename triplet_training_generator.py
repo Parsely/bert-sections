@@ -15,7 +15,8 @@ def get_train_test_apikeys(memmap_directory, split=0.20):
 
     # add weights to the apikeys; these are equivalent to the sqrt of the number of posts
     unique_apikeys = pd.DataFrame(df.groupby(['apikey'])['row_number'].count().reset_index(name='num_posts'))
-    unique_apikeys['weights'] = unique_apikeys[['num_posts']].apply(np.sqrt)
+    # unique_apikeys['weights'] = unique_apikeys[['num_posts']].apply(np.sqrt)
+    unique_apikeys['weights'] = unique_apikeys[['num_posts']].astype(np.float)
 
     # split into train and test based on apikey
     train_apikeys, test_apikeys = train_test_split(unique_apikeys, test_size=split)
@@ -49,7 +50,7 @@ def training_generator(memmap_directory, apikey_weighted_df):
         grouped_rows[apikey] = per_apikey_sections
 
     # We convert the weights to a probability distribution, then sample rapidly from it
-    # by converted the distribution to a cumulative sum and using searchsorted
+    # by converting the distribution to a cumulative sum and using searchsorted
     # This gives us a random sample from O(n) weights in O(log n) time.
     apikey_choices = apikey_weighted_df['apikey'].tolist()
     apikey_weights = np.array(apikey_weighted_df['weights'].tolist())
@@ -57,12 +58,12 @@ def training_generator(memmap_directory, apikey_weighted_df):
     apikey_cumweights = np.cumsum(apikey_weights)
 
     while True:
-        # sample from weighted apikey
-        # We could also pregenerate the per-apikey dataframes to save time
+        # Sample an apikey with the weights array
         apikey_idx = np.searchsorted(apikey_cumweights, np.random.rand(), side='left')
         apikey = apikey_choices[apikey_idx]
         apikey_subset = grouped_rows[apikey]
 
+        # Choose a row from the sections in this apikey
         anchor_section_row = apikey_subset.sample(1, weights='weights')
         posts_in_section = anchor_section_row.iloc[0].row_number
         anchor_section = anchor_section_row.index[0]
@@ -70,7 +71,7 @@ def training_generator(memmap_directory, apikey_weighted_df):
         anchor_vector = word_indices[anchor_rownum]
         positive_vector = word_indices[positive_rownum]
 
-        # Sample 2 in case we get the same section again
+        # Sample 2 potential negatives in case we get the same section again
         negative_sections = apikey_subset.sample(2, weights='weights').index.tolist()
         if negative_sections[0] == anchor_section:
             negative_section = negative_sections[1]
@@ -81,14 +82,6 @@ def training_generator(memmap_directory, apikey_weighted_df):
         # We store the data as np.uint16 to save space, but we definitely want a more normal
         # data type before it goes to Pytorch
         yield np.stack([anchor_vector, positive_vector, negative_vector]).astype(np.int)
-        # data.append({'apikey': apikey,
-        #                              'anchor': anchor_vector,
-        #                              'positive': positive,
-        #                              'negative': negative_text,
-        #                              'section': anchor_section,
-        #                              'negative_section': negative_section})
-        # remove anchor row; sampling without replacement
-        # anchor = anchor[anchor['row_number'] != anchor_row['row_number']]
 
 
 def main():

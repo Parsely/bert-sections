@@ -48,10 +48,9 @@ def main(df, memmap, model_name, total_batch_size=1024):
     save_path = Path('model.save')
 
     train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(df)
-    debug_weighted_apikeys = pd.concat([train_weighted_apikeys, test_weighted_apikeys]).query('num_posts > 1000000')
-    train_dataset = DataGenerator(df, memmap, debug_weighted_apikeys)
+    train_dataset = DataGenerator(df, memmap, train_weighted_apikeys)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, num_workers=1)
-    test_dataset = DataGenerator(df, memmap, debug_weighted_apikeys)
+    test_dataset = DataGenerator(df, memmap, test_weighted_apikeys)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=1)
 
     model = SectionModel(model_name).cuda()

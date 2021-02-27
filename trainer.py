@@ -37,7 +37,7 @@ class SectionModel(torch.nn.Module):
         return out
 
 
-def main(df, memmap, model_name, total_batch_size=256):
+def main(df, memmap, model_name, total_batch_size=512):
     if 'large' in model_name:
         batch_size = 8
     else:

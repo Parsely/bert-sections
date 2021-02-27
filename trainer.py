@@ -87,12 +87,12 @@ def main(df, memmap, model_name, total_batch_size=256):
                 # negative_similarities = F.cosine_similarity(outputs[:, 0], outputs[:, 2])
                 # loss = negative_similarities - positive_similarities + 1
                 loss = torch.relu(loss)
-                loss = loss.mean()
+                loss = loss.mean() / minibatches_per_update
                 loss.backward()
                 if (i + 1) % minibatches_per_update == 0:
                     optimizer.step()
                 bar.update(1)
-                bar_loss = ((bar_loss * i) + float(loss.detach())) / (i + 1)  # Rolling mean loss
+                bar_loss = ((bar_loss * i) + float(loss.detach() * minibatches_per_update)) / (i + 1)  # Rolling mean loss
                 bar.set_postfix_str(f"Loss: {bar_loss:.3f}")
                 if i == batches_per_epoch - 1:
                     break

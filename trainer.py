@@ -36,8 +36,9 @@ class SectionModel(torch.nn.Module):
         return out
 
 
-def main():
-    batch_size = 32
+def main(df, memmap, model_name):
+    batch_size = 8
+    minibatches_per_update = 16
     batches_per_epoch = (2 ** 19) // batch_size
     eval_batches_per_epoch = (2 ** 18) // batch_size
     save_path = Path('model.save')
@@ -84,8 +85,8 @@ def main():
                 loss = torch.relu(loss)
                 loss = loss.mean()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model_params, max_norm=1.0)
-                optimizer.step()
+                if (i + 1) % minibatches_per_update == 0:
+                    optimizer.step()
                 bar.update(1)
                 bar_loss = ((bar_loss * i) + float(loss.detach())) / (i + 1)  # Rolling mean loss
                 bar.set_postfix_str(f"Loss: {bar_loss:.3f}")

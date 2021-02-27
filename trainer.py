@@ -7,26 +7,27 @@ from transformers import AutoModel
 import torch
 from tqdm import tqdm
 import pandas as pd
+from argparse import ArgumentParser
 
 MEMMAP_DIRECTORY = Path("/media/data/tokenized_crawl")
 BATCHES_PER_EPOCH = 8192
 
 
 class DataGenerator(IterableDataset):
-    def __init__(self, memmap_directory, apikey_weighted_df):
+    def __init__(self, df, memmap, apikey_weighted_df):
         super(DataGenerator, self).__init__()
-        self.data_generator = training_generator(memmap_directory, apikey_weighted_df)
+        self.data_generator = training_generator(df, memmap, apikey_weighted_df)
 
     def __iter__(self):
         return self.data_generator
 
 
 class SectionModel(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, model_name):
         super(SectionModel, self).__init__()
         # We need to make sure this matches the model we tokenized for!
         # self.bert = AutoModel.from_pretrained('distilbert-base-cased')
-        self.bert = AutoModel.from_pretrained('distilbert-base-cased')
+        self.bert = AutoModel.from_pretrained(model_name)
         # self.out = torch.nn.Linear(768, 768, bias=False)
 
     def forward(self, tensor_in):
@@ -36,21 +37,24 @@ class SectionModel(torch.nn.Module):
         return out
 
 
-def main(df, memmap, model_name):
-    batch_size = 8
-    minibatches_per_update = 16
+def main(df, memmap, model_name, total_batch_size=256):
+    if 'large' in model_name:
+        batch_size = 8
+    else:
+        batch_size = 32
+    minibatches_per_update = total_batch_size // batch_size
     batches_per_epoch = (2 ** 19) // batch_size
     eval_batches_per_epoch = (2 ** 18) // batch_size
     save_path = Path('model.save')
 
-    train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(MEMMAP_DIRECTORY)
+    train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(df)
     debug_weighted_apikeys = pd.concat([train_weighted_apikeys, test_weighted_apikeys]).query('num_posts > 1000000')
-    train_dataset = DataGenerator(MEMMAP_DIRECTORY, debug_weighted_apikeys)
+    train_dataset = DataGenerator(df, memmap, debug_weighted_apikeys)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, num_workers=1)
-    test_dataset = DataGenerator(MEMMAP_DIRECTORY, debug_weighted_apikeys)
+    test_dataset = DataGenerator(df, memmap, debug_weighted_apikeys)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, num_workers=1)
 
-    model = SectionModel().cuda()
+    model = SectionModel(model_name).cuda()
     # Diverges or just outputs the same vector for all samples at higher LRs
     model_params = model.parameters()
     optimizer = torch.optim.Adam(model_params, lr=1e-5)
@@ -123,4 +127,11 @@ def main(df, memmap, model_name):
 
 
 if __name__ == '__main__':
-    main()
+    parser = ArgumentParser()
+    parser.add_argument('--dataframe', type=Path, required=True)
+    parser.add_argument('--word_indices', type=Path, required=True)
+    parser.add_argument('--model_name', type=str, required=True)
+    args = parser.parse_args()
+    assert args.dataframe.is_file()
+    assert args.word_indices.is_file()
+    main(args.dataframe, args.word_indices, args.model_name)

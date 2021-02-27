@@ -10,8 +10,8 @@ from random import choice, sample
 MAX_TOKENS_PER_DOC = 256
 
 
-def get_train_test_apikeys(memmap_directory, split=0.20):
-    df = pd.read_pickle(memmap_directory / 'dataframe.pkl')
+def get_train_test_apikeys(df, split=0.20):
+    df = pd.read_pickle(df)
 
     # add weights to the apikeys; these are equivalent to the sqrt of the number of posts
     unique_apikeys = pd.DataFrame(df.groupby(['apikey'])['row_number'].count().reset_index(name='num_posts'))
@@ -24,10 +24,10 @@ def get_train_test_apikeys(memmap_directory, split=0.20):
     return train_apikeys, test_apikeys
 
 
-def training_generator(memmap_directory, apikey_weighted_df):
-    df = pd.read_pickle(memmap_directory / 'dataframe.pkl')
+def training_generator(df, memmap, apikey_weighted_df):
+    df = pd.read_pickle(df)
     data = df[df['apikey'].isin(apikey_weighted_df['apikey'])].copy(deep=True)
-    word_indices = np.memmap(memmap_directory / 'word_indices.memmap', dtype=np.uint16, mode='r',
+    word_indices = np.memmap(str(memmap), dtype=np.uint16, mode='r',
                              shape=(len(df), MAX_TOKENS_PER_DOC))
     del df
     # anchor = data_subset.copy(deep=True)

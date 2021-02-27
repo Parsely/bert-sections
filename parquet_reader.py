@@ -55,7 +55,7 @@ def process_file(file):
 
 
 def process_file_to_memmap(file, identifier_df, memmap_path, memmap_shape):
-    tokenizer = AutoTokenizer.from_pretrained('distilbert-base-cased')
+    tokenizer = AutoTokenizer.from_pretrained('bert-large-uncased-whole-word-masking')
     table = pq.read_table(str(file), columns=['title_en', 'full_content_en'])
     # Doing it this way vastly reduces memory usage and stops leaking
     df = table.to_pandas(split_blocks=True, self_destruct=True)
@@ -154,9 +154,9 @@ def main():
     df['row_number'] = df.index
     df = df.set_index('content_hash', verify_integrity=True)
 
-    df.to_pickle(str(OUTPUT_DIR / 'dataframe.pkl'))
+    df.to_pickle(str(OUTPUT_DIR / 'dataframe_bertwwm.pkl'), protocol=4)  # Py3.7 compatibility
 
-    memmap_path = str(OUTPUT_DIR / 'word_indices.memmap')
+    memmap_path = str(OUTPUT_DIR / 'word_indices_bertwwm.memmap')
     memmap_shape = (len(df), MAX_TOKENS_PER_DOC)
     word_indices = np.memmap(memmap_path, dtype=np.uint16, mode='w+',
                              shape=memmap_shape)

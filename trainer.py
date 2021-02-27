@@ -37,7 +37,7 @@ class SectionModel(torch.nn.Module):
         return out
 
 
-def main(df, memmap, model_name, total_batch_size=2048):
+def main(df, memmap, model_name, total_batch_size=1024):
     if 'large' in model_name:
         batch_size = 8
     else:
@@ -57,7 +57,7 @@ def main(df, memmap, model_name, total_batch_size=2048):
     model = SectionModel(model_name).cuda()
     # Diverges or just outputs the same vector for all samples at higher LRs
     model_params = model.parameters()
-    optimizer = torch.optim.Adam(model_params, lr=1e-6)
+    optimizer = torch.optim.Adam(model_params, lr=1e-5)
     if save_path.is_file():
         print("Loading state...")
         checkpoint = torch.load(str(save_path))
@@ -70,7 +70,7 @@ def main(df, memmap, model_name, total_batch_size=2048):
         with tqdm(total=batches_per_epoch, dynamic_ncols=True) as bar:
             bar.set_description(f"Epoch {epoch}")
             bar_loss = 0.
-            model.train()
+            model.eval()  # I think I don't want dropout for now
             optimizer.zero_grad()
             for i, batch in enumerate(train_loader):
                 batch = batch.cuda()

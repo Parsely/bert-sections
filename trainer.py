@@ -37,7 +37,7 @@ class SectionModel(torch.nn.Module):
         return out
 
 
-def main(df, memmap, model_name, total_batch_size=4096):
+def main(df, memmap, model_name, save_path, total_batch_size=4096):
     if 'large' in model_name:
         batch_size = 8
     else:
@@ -45,7 +45,6 @@ def main(df, memmap, model_name, total_batch_size=4096):
     minibatches_per_update = total_batch_size // batch_size
     batches_per_epoch = (2 ** 19) // batch_size
     eval_batches_per_epoch = (2 ** 18) // batch_size
-    save_path = Path('model.save')
 
     train_weighted_apikeys, test_weighted_apikeys = get_train_test_apikeys(df)
     train_dataset = DataGenerator(df, memmap, train_weighted_apikeys)
@@ -130,7 +129,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataframe', type=Path, required=True)
     parser.add_argument('--word_indices', type=Path, required=True)
     parser.add_argument('--model_name', type=str, required=True)
+    parser.add_argument('--save_path', type=Path, required=True)
     args = parser.parse_args()
     assert args.dataframe.is_file()
     assert args.word_indices.is_file()
-    main(args.dataframe, args.word_indices, args.model_name)
+    main(args.dataframe, args.word_indices, args.model_name, args.save_path)
